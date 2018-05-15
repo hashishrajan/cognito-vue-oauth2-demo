@@ -29,6 +29,7 @@ phases:
     commands:
       - cd "/appsec/${PACKAGE}"
       - pwd
+      - npm update
       - npm install
       - npm i npm
       - npm install http-proxy-agent
