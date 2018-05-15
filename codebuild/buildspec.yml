@@ -31,5 +31,6 @@ phases:
       - pwd
       - npm install
       - npm i npm
+      - npm install http-proxy-agent
       - nsp check --reporter checkstyle
       - echo "Success"
