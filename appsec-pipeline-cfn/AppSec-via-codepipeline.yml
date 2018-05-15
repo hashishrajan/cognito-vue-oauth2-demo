@@ -1,0 +1,233 @@
+Description: >
+
+    This CloudFormation template will deploy a full CI/CD pipeline for DevSecOps
+    development. It includes building with AWS CodeBuild, and infrastructure
+    deployment via AWS CloudFormation. It will create an AWS CodePipeline for
+    orchastrating builds, testing and deployments to beta and production
+    environments.
+
+Parameters:
+
+    ApplicationName:
+        Description: This will be used to name the pipeline and build resources
+        Type: String
+        AllowedPattern: '[A-Za-z0-9-]+'
+
+    ArtifactS3Bucket:
+        Description: An existing S3 bucket within this AWS account
+        Type: String
+
+    GitHubOAuthToken:
+        Description: Create a token with 'repo' and 'admin:repo_hook' permissions here https://github.com/settings/tokens
+        Type: String
+
+    GitHubUser:
+        Description: Enter GitHub username of the repository owner
+        Type: String
+
+    GitHubRepository:
+        Description: Enter the repository name that should be monitored for changes
+        Type: String
+
+    GitHubBranch:
+        Description: Enter the GitHub branch to monitored
+        Type: String
+        Default: master
+
+Metadata:
+
+    AWS::CloudFormation::Interface:
+        ParameterGroups:
+            -
+                Label:
+                    default: Application Configuration
+                Parameters:
+                    - ApplicationName
+                    - ArtifactS3Bucket
+            -
+                Label:
+                    default: GitHub Configuration
+                Parameters:
+                    - GitHubOAuthToken
+                    - GitHubUser
+                    - GitHubRepository
+                    - GitHubBranch
+
+        ParameterLabels:
+            ApplicationName:
+                default: Application Name
+            ArtifactS3Bucket:
+                default: CodePipeline S3 Bucket
+            GitHubRepository:
+                default: Repository Name
+            GitHubUser:
+                default: Repository Owner
+            GitHubBranch:
+                default: Repository Branch
+            GitHubOAuthToken:
+                default: OAuth2 Token
+
+Resources:
+
+    CodePipeline:
+        Type: AWS::CodePipeline::Pipeline
+        Properties:
+            Name: !Ref ApplicationName
+            RoleArn: !Sub ${CodePipelineRole.Arn}
+            ArtifactStore:
+                Type: S3
+                Location: !Ref ArtifactS3Bucket
+            Stages:
+                -
+                    Name: Source
+                    Actions:
+                        -
+                            Name: GitHub
+                            ActionTypeId:
+                                Category: Source
+                                Owner: ThirdParty
+                                Version: 1
+                                Provider: GitHub
+                            OutputArtifacts:
+                                -  Name: Source
+                            Configuration:
+                                Owner: !Ref GitHubUser
+                                Repo: !Ref GitHubRepository
+                                Branch: !Ref GitHubBranch
+                                OAuthToken: !Ref GitHubOAuthToken
+                -
+                    Name: Build
+                    Actions:
+                        -
+                            Name: CodeBuild
+                            InputArtifacts:
+                                - Name: Source
+                            ActionTypeId:
+                                Category: Build
+                                Owner: AWS
+                                Version: 1
+                                Provider: CodeBuild
+                            OutputArtifacts:
+                                - Name: Built
+                            Configuration:
+                                ProjectName: !Ref CodeBuild
+
+
+    CodeBuild:
+        Type: AWS::CodeBuild::Project
+        Properties:
+            Name: !Ref ApplicationName
+            Description: !Sub Build project for ${ApplicationName}
+            ServiceRole: !Ref CodeBuildRole
+            Source:
+                Type: CODEPIPELINE
+                BuildSpec: "codebuild/buildspec.yml"
+            Environment:
+                ComputeType: BUILD_GENERAL1_SMALL
+                Image: aws/codebuild/nodejs:8.11.0
+                Type: LINUX_CONTAINER
+                EnvironmentVariables:
+                    -
+                        Name: ARTIFACT_S3_BUCKET
+                        Value: !Sub ${ArtifactS3Bucket}
+            Artifacts:
+                Name: !Ref ApplicationName
+                Type: CODEPIPELINE
+
+    CodePipelineRole:
+        Type: AWS::IAM::Role
+        Properties:
+            Path: /
+            RoleName: !Sub ${ApplicationName}-CodePipeline-${AWS::Region}
+            AssumeRolePolicyDocument: |
+                {
+                    "Statement": [{
+                        "Action": "sts:AssumeRole",
+                        "Effect": "Allow",
+                        "Principal": {
+                            "Service": "codepipeline.amazonaws.com"
+                        }
+                    }]
+                }
+            Policies:
+                -
+                    PolicyName: !Sub ${ApplicationName}-CodePipeline-${AWS::Region}
+                    PolicyDocument: !Sub |
+                        {
+                            "Statement": [
+                                {
+                                    "Action": [ "s3:GetBucketVersioning" ],
+                                    "Resource": [ "arn:aws:s3:::${ArtifactS3Bucket}" ],
+                                    "Effect": "Allow"
+                                },
+                                {
+                                    "Action": [
+                                        "s3:PutObject",
+                                        "s3:GetObject",
+                                        "S3:GetObjectVersion"
+                                    ],
+                                    "Resource": [
+                                        "arn:aws:s3:::${ArtifactS3Bucket}/${ApplicationName}/*"
+                                    ],
+                                    "Effect": "Allow"
+                                },
+                                {
+                                    "Action": [
+                                        "codebuild:BatchGetBuilds",
+                                        "codebuild:StartBuild"
+                                    ],
+                                    "Resource": "*",
+                                    "Effect": "Allow"
+                                }
+                            ]
+                        }
+
+    CodeBuildRole:
+        Type: AWS::IAM::Role
+        Properties:
+            Path: /
+            RoleName: !Sub ${ApplicationName}-CodeBuild-${AWS::Region}
+            AssumeRolePolicyDocument: |
+                    {
+                        "Statement": [{
+                            "Action": "sts:AssumeRole",
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "codebuild.amazonaws.com"
+                            }
+                        }]
+                    }
+            Policies:
+                -
+                    PolicyName: !Sub ${ApplicationName}-CodeBuild-${AWS::Region}
+                    PolicyDocument: !Sub |
+                        {
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Resource": [ "*" ],
+                                    "Action": [
+                                        "logs:CreateLogGroup",
+                                        "logs:CreateLogStream",
+                                        "logs:PutLogEvents"
+                                    ]
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        "arn:aws:s3:::${ArtifactS3Bucket}/${ApplicationName}/*"
+                                    ],
+                                    "Action": [
+                                        "s3:GetObject",
+                                        "s3:GetObjectVersion",
+                                        "s3:PutObject"
+                                    ]
+                                }
+                            ]
+                        }
+
+Outputs:
+
+    CodePipelineURL:
+        Description: The URL for the created pipeline
+        Value: !Sub https://${AWS::Region}.console.aws.amazon.com/codepipeline/home?region=${AWS::Region}#/view/${ApplicationName}
