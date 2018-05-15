@@ -30,5 +30,6 @@ phases:
       - cd "/appsec/${PACKAGE}"
       - pwd
       - npm install
+      - npm i npm
       - nsp check --reporter checkstyle
       - echo "Success"
