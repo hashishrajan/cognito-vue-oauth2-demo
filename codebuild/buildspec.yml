@@ -30,8 +30,7 @@ phases:
       - cd "/appsec/${PACKAGE}"
       - pwd
       - npm update
+      - npm install -g npm@latest
       - npm install
-      - npm i npm
-      - npm install http-proxy-agent
       - nsp check --reporter checkstyle
       - echo "Success"
