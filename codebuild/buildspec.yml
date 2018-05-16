@@ -29,9 +29,6 @@ phases:
     commands:
       - cd "/appsec/${PACKAGE}"
       - pwd
-      - npm update
-      - npm install -g npm@latest
-      - npm i socks http-proxy-agent lodash
-      - npm install
+      - npm i
       - nsp check --reporter checkstyle
       - echo "Success"
