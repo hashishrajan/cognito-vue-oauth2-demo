@@ -31,4 +31,4 @@ phases:
       - pwd
       - npm i
       - nsp check --reporter checkstyle
-      - echo "Success"
+      - if 'echo $?'==0 then echo "Success" else echo "Investigate"
