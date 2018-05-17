@@ -31,4 +31,4 @@ phases:
       - pwd
       - npm i
       - nsp check --reporter checkstyle
-      - if ['echo $?'==0]; then echo "Success" else echo "Investigate"
+      - echo "Build actions completed. Review logs for success/failure"
